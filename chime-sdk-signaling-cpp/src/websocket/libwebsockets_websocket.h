@@ -46,7 +46,7 @@ class LibwebsocketsWebsocket : public Websocket {
 
   // This policy sets both connection attempt retry parameters and ping/pong parameters.
   // The retry parameters apply to failures that happen before a websocket connection is established.
-  lws_retry_bo_t retry_and_idle_policy_;
+  aws_lws_retry_bo_t retry_and_idle_policy_;
 
   // Count of consecutive connection attempt retries.
   uint16_t connection_retry_count_;
@@ -61,26 +61,26 @@ class LibwebsocketsWebsocket : public Websocket {
   WebsocketObserver* observer_ = nullptr;
 
   // Info to create the websocket context.
-  struct lws_context_creation_info info_ = {};
+  struct aws_lws_context_creation_info info_ = {};
 
   // Websocket context used to create the websocket instance.
-  struct lws_context* context_ = nullptr;
+  struct aws_lws_context* context_ = nullptr;
 
   // Represents the websocket instance.
-  struct lws* wsi_ = nullptr;
+  struct aws_lws* wsi_ = nullptr;
 
   // Needed for Libwebsockets to retry failed connection attempts.
-  // lws_sorted_usec_list_t is used by Libwebsockets to stagger connection attempts.
+  // aws_lws_sorted_usec_list_t is used by Libwebsockets to stagger connection attempts.
   struct retry_connect {
-    lws_sorted_usec_list_t sul;
+    aws_lws_sorted_usec_list_t sul;
     LibwebsocketsWebsocket* self;
   } retry_connect_ = {};
 
   // Invoked by Libwebsockets to retry failed connection attempts.
-  static void RetryConnect(lws_sorted_usec_list_t* sul);
+  static void RetryConnect(aws_lws_sorted_usec_list_t* sul);
 
   // Invoked by Libwebsockets and provides details to listener about all events, errors, and messages.
-  static int Callback(struct lws* wsi, enum lws_callback_reasons reason, void* user, void* in, size_t len);
+  static int Callback(struct aws_lws* wsi, enum aws_lws_callback_reasons reason, void* user, void* in, size_t len);
 
   // Converts from chime::LogLevel to int with flipped bits representing Libwebsockets log levels.
   int ConvertLogLevel(LogLevel level);

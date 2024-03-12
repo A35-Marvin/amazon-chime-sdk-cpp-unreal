@@ -1,6 +1,8 @@
 cmake_minimum_required(VERSION 3.17...3.20)
 
-set(CMAKE_CXX_STANDARD 17)
+set(CMAKE_CXX_STANDARD 14)
+set(CMAKE_CXX_STANDARD_REQUIRED ON)
+set(CMAKE_CXX_EXTENSIONS OFF)
 
 set(LIBRARY_NAME amazon-chime-signaling-sdk-cpp-lib)
 
@@ -37,9 +39,9 @@ configure_file (
     "${PROJECT_SOURCE_DIR}/src/version.h"
 )
 
-# set flag to build in different env. Default to Debug
+# set flag to build in different env. Default to Release
 if(NOT CMAKE_BUILD_TYPE)
-    set(CMAKE_BUILD_TYPE Debug)
+    set(CMAKE_BUILD_TYPE Release ... FORCE)
 endif()
 
 message(
@@ -85,8 +87,8 @@ list(APPEND CMAKE_MODULE_PATH "${CMAKE_CURRENT_SOURCE_DIR}/cmake/")
 include(FetchContent)
 FetchContent_Declare(
         libwebsockets
-        GIT_REPOSITORY https://github.com/warmcat/libwebsockets.git
-        GIT_TAG        141ebf373ca0fed7b41eb960cdbd7ab1f29490dc
+        GIT_REPOSITORY https://github.com/A35-Marvin/aws-libwebsockets.git
+        GIT_TAG        9560724395ec581020818715086eb0d73e1e719b
 )
 
 # Use open ssl static lib
@@ -99,7 +101,11 @@ set(LWS_WITHOUT_TEST_SERVER_EXTPOLL ON CACHE BOOL "Don't build the libwebsocket-
 set(LWS_WITHOUT_TEST_PING ON CACHE BOOL "Don't build the libwebsocket-test-apps" FORCE)
 set(LWS_WITHOUT_TEST_CLIENT ON CACHE BOOL "Don't build the libwebsocket-test-apps" FORCE)
 # TODO @hokyungh: Add more options to only build library.
-set(LWS_WITH_BORINGSSL ON CACHE BOOL "Use OpenSSL fork BoringSSL" FORCE)
+#set(LWS_WITH_BORINGSSL ON CACHE BOOL "Use OpenSSL fork BoringSSL" FORCE)
+set(LWS_WITH_BORINGSSL OFF CACHE BOOL "Don't use OpenSSL fork BoringSSL" FORCE)
+#set(LWS_HAVE_OPENSSL_ECDH_H ON CACHE BOOL "" FORCE)
+set(LWS_HAVE_HMAC_CTX_new ON CACHE BOOL "" FORCE)
+set(LWS_HAVE_EVP_MD_CTX_free ON CACHE BOOL "" FORCE)
 FetchContent_MakeAvailable(libwebsockets)
 
 target_link_libraries(${LIBRARY_NAME} PRIVATE websockets)
@@ -107,8 +113,8 @@ target_link_libraries(${LIBRARY_NAME} PRIVATE websockets)
 # Protobuf
 FetchContent_Declare(
 	protobuf
-	GIT_REPOSITORY https://github.com/protocolbuffers/protobuf.git
-	GIT_TAG        fde7cf7358ec7cd69e8db9be4f1fa6a5c431386a
+	GIT_REPOSITORY https://github.com/A35-Marvin/aws-protobuf.git
+	GIT_TAG        a6d84d0b0b246a0abb99a97e5ad20094b395b504
 	SOURCE_SUBDIR  cmake
 	)
 
@@ -126,7 +132,7 @@ target_include_directories(
         ${LIBRARY_NAME} INTERFACE $<BUILD_INTERFACE:${PROJECT_SOURCE_DIR}/include>
         $<INSTALL_INTERFACE:include>)
 
-target_compile_features(${LIBRARY_NAME} PUBLIC cxx_std_17)
+target_compile_features(${LIBRARY_NAME} PUBLIC cxx_std_14)
 # set flag as c++11 instead of gnu++11 for some compilers
 set_target_properties(${LIBRARY_NAME} PROPERTIES CXX_EXTENSIONS OFF)
 
@@ -150,7 +156,8 @@ if(${CMAKE_SYSTEM_NAME} MATCHES "Windows")
     # Set Runtime Library as MT to use static library
     set_property(
             TARGET ${LIBRARY_NAME} PROPERTY MSVC_RUNTIME_LIBRARY
-            "MultiThreaded$<$<CONFIG:Debug>:Debug>")
+            "MultiThreadedDLL")
+	set_property(TARGET ${LIBRARY_NAME} PROPERTY C_STANDARD 11)
 endif()
 
 # Combine binaries

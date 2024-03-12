@@ -38,7 +38,7 @@ LibwebsocketsWebsocket::LibwebsocketsWebsocket(LibwebsocketsWebsocketConfigurati
       configuration.idle_timeout_sec;  // Seconds without proof of a valid connection before hanging up.
 
   // Configure libwebsocket protocols.
-  struct lws_protocols* protocols = new lws_protocols[2]{
+  struct aws_lws_protocols* protocols = new aws_lws_protocols[2]{
       {
           configuration.protocol_name.c_str(), Callback,
           0,     // per_session_data_size : Memory Libwebsockets will allocate for user data. NA in our case.
@@ -52,16 +52,16 @@ LibwebsocketsWebsocket::LibwebsocketsWebsocket(LibwebsocketsWebsocketConfigurati
 
   // Setup logging
   int log_level = ConvertLogLevel(configuration.level);
-  lws_set_log_level(log_level, NULL);
+  aws_lws_set_log_level(log_level, NULL);
 
-  // Prepare lws_context_creation_info. This is the context for the client.
+  // Prepare aws_lws_context_creation_info. This is the context for the client.
   memset(&info_, 0, sizeof info_);
   info_.options = LWS_SERVER_OPTION_DO_SSL_GLOBAL_INIT;
   info_.port = CONTEXT_PORT_NO_LISTEN;  // This is a client, so no need to listen.
   info_.protocols = protocols;
 }
 
-int LibwebsocketsWebsocket::Callback(struct lws* wsi, enum lws_callback_reasons reason, void* user, void* in,
+int LibwebsocketsWebsocket::Callback(struct aws_lws* wsi, enum aws_lws_callback_reasons reason, void* user, void* in,
                                      size_t len) {
   auto* self = static_cast<LibwebsocketsWebsocket*>(user);
 
@@ -71,9 +71,9 @@ int LibwebsocketsWebsocket::Callback(struct lws* wsi, enum lws_callback_reasons 
       self->HandleError(std::string("Error while trying to connect the websocket: ") + std::string(error));
 
       // Retry connection attempt according to retry policy.
-      if (lws_retry_sul_schedule_retry_wsi(wsi, &(self->retry_connect_.sul), self->RetryConnect,
+      if (aws_lws_retry_sul_schedule_retry_wsi(wsi, &(self->retry_connect_.sul), self->RetryConnect,
                                            &(self->connection_retry_count_))) {
-        lwsl_err("Connection attempts exhausted.\n");
+        aws_lwsl_err("Connection attempts exhausted.\n");
         // Return non-zero to close the connection.
         return -1;
       }
@@ -81,14 +81,14 @@ int LibwebsocketsWebsocket::Callback(struct lws* wsi, enum lws_callback_reasons 
     }
 
     case LWS_CALLBACK_CLIENT_RECEIVE: {
-      lwsl_debug("Data received.\n");
-      lwsl_hexdump_debug(in, len);
-      const size_t remaining = lws_remaining_packet_payload(wsi);
+      aws_lwsl_debug("Data received.\n");
+      aws_lwsl_hexdump_debug(in, len);
+      const size_t remaining = aws_lws_remaining_packet_payload(wsi);
       auto* uint8_ptr = static_cast<uint8_t*>(in);
       // Messages can be fragmented if the size exceeds max bytes
       // Therefore, it needs to handle fragmented message.
       self->received_data_buffer_.insert(self->received_data_buffer_.end(), uint8_ptr, uint8_ptr + len);
-      if (!remaining && lws_is_final_fragment(wsi)) {
+      if (!remaining && aws_lws_is_final_fragment(wsi)) {
         self->observer_->OnWebsocketBinaryReceived(self->received_data_buffer_);
         self->received_data_buffer_.clear();
       }
@@ -96,15 +96,15 @@ int LibwebsocketsWebsocket::Callback(struct lws* wsi, enum lws_callback_reasons 
     }
 
     case LWS_CALLBACK_CLIENT_ESTABLISHED: {
-      lwsl_info("Handshake complete. Successfully upgraded to websocket.\n");
+      aws_lwsl_info("Handshake complete. Successfully upgraded to websocket.\n");
       self->observer_->OnWebsocketConnected();
       break;
     }
 
     case LWS_CALLBACK_WS_PEER_INITIATED_CLOSE: {
       self->close_code_ = *(static_cast<uint16_t*>(in));
-      lwsl_info("Server initiated connection close. Close code: %hu\n", self->close_code_);
-      lwsl_hexdump_debug(in, len);
+      aws_lwsl_info("Server initiated connection close. Close code: %hu\n", self->close_code_);
+      aws_lwsl_hexdump_debug(in, len);
       // By returning zero, Libwebsockets will echo the close back to the server, then close.
       return 0;
     }
@@ -116,7 +116,7 @@ int LibwebsocketsWebsocket::Callback(struct lws* wsi, enum lws_callback_reasons 
       } else {
         description = "Websocket closed.";
       }
-      lwsl_info("%s", description.c_str());
+      aws_lwsl_info("%s", description.c_str());
 
       WebsocketStatus status;
       status.description = description;
@@ -125,11 +125,11 @@ int LibwebsocketsWebsocket::Callback(struct lws* wsi, enum lws_callback_reasons 
     }
 
     case LWS_CALLBACK_CLIENT_APPEND_HANDSHAKE_HEADER: {
-      lwsl_info("Appending additional headers.\n");
+      aws_lwsl_info("Appending additional headers.\n");
       unsigned char** data_pointer = static_cast<unsigned char**>(in);
       unsigned char* end_of_data = (*data_pointer) + len;
       for (const auto& additional_header : self->configuration_.additional_headers) {
-        if (lws_add_http_header_by_name(wsi, reinterpret_cast<const unsigned char*>(additional_header.first.c_str()),
+        if (aws_lws_add_http_header_by_name(wsi, reinterpret_cast<const unsigned char*>(additional_header.first.c_str()),
                                         reinterpret_cast<const unsigned char*>(additional_header.second.c_str()),
                                         additional_header.second.size(), data_pointer, end_of_data)) {
           self->HandleError("Failed to add header: " + additional_header.first + " " + additional_header.second);
@@ -151,11 +151,11 @@ int LibwebsocketsWebsocket::Callback(struct lws* wsi, enum lws_callback_reasons 
         std::copy(data.begin(), data.end(), data_with_prefix.begin() + LWS_PRE);
 
         std::string data_string(data.begin(), data.end());
-        lwsl_debug("Writing message with length %lu and data %s \n", data.size(), data_string.c_str());
-        int bytes_written = lws_write(self->wsi_, &(data_with_prefix)[LWS_PRE], data.size(), LWS_WRITE_BINARY);
+        aws_lwsl_debug("Writing message with length %lu and data %s \n", data.size(), data_string.c_str());
+        int bytes_written = aws_lws_write(self->wsi_, &(data_with_prefix)[LWS_PRE], data.size(), LWS_WRITE_BINARY);
         if (bytes_written == -1) {
           self->HandleError("Fatal write error. Closing.");
-          lwsl_hexdump_debug(in, len);
+          aws_lwsl_hexdump_debug(in, len);
 
           // Return non-zero to close the connection.
           return -1;
@@ -164,36 +164,36 @@ int LibwebsocketsWebsocket::Callback(struct lws* wsi, enum lws_callback_reasons 
       break;
     }
     case LWS_CALLBACK_COMPLETED_CLIENT_HTTP: {
-      lwsl_info("Headers complete.");
+      aws_lwsl_info("Headers complete.");
       break;
     }
 
     default:
-      lwsl_debug("Callback reason, %d, not handled.", static_cast<int>(reason));
-      lwsl_hexdump_debug(in, len);
+      aws_lwsl_debug("Callback reason, %d, not handled.", static_cast<int>(reason));
+      aws_lwsl_hexdump_debug(in, len);
       break;
   }
 
   // Required by Libwebsockets for internal postprocessing.
-  return lws_callback_http_dummy(wsi, reason, user, in, len);
+  return aws_lws_callback_http_dummy(wsi, reason, user, in, len);
 }
 
-void LibwebsocketsWebsocket::RetryConnect(lws_sorted_usec_list_t* sul) {
+void LibwebsocketsWebsocket::RetryConnect(aws_lws_sorted_usec_list_t* sul) {
   // Libwebsockets will offset sul to get its owner struct.
-  struct retry_connect* retry = lws_container_of(sul, struct retry_connect, sul);
+  struct retry_connect* retry = aws_lws_container_of(sul, struct retry_connect, sul);
   LibwebsocketsWebsocket* self = retry->self;
   self->Connect();
 }
 
 void LibwebsocketsWebsocket::Connect() {
   // Initialize the client context.
-  context_ = lws_create_context(&info_);
+  context_ = aws_lws_create_context(&info_);
   if (!context_) {
     HandleError("lws context initialization failed.");
     return;
   }
 
-  struct lws_client_connect_info connect_info;
+  struct aws_lws_client_connect_info connect_info;
   memset(&connect_info, 0, sizeof(connect_info));
 
   // Parse the url.
@@ -202,7 +202,7 @@ void LibwebsocketsWebsocket::Connect() {
   std::string url = configuration_.url;
   auto path_start = static_cast<int>(url.find("/control/"));
   std::string path(url.begin() + path_start, url.end());
-  if (lws_parse_uri((char*)(url.c_str()), &url_protocol, &connect_info.address, &connect_info.port, &url_temp_path)) {
+  if (aws_lws_parse_uri((char*)(url.c_str()), &url_protocol, &connect_info.address, &connect_info.port, &url_temp_path)) {
     HandleError("Could not parse url: " + url);
     return;
   }
@@ -219,64 +219,64 @@ void LibwebsocketsWebsocket::Connect() {
   connect_info.retry_and_idle_policy = &retry_and_idle_policy_;
   connect_info.userdata = this;
 
-  auto lws = lws_client_connect_via_info(&connect_info);
-  if (!lws) {
-    HandleError("lws_client_connect_via_info failed.");
+  auto aws_lws = aws_lws_client_connect_via_info(&connect_info);
+  if (!aws_lws) {
+    HandleError("aws_lws_client_connect_via_info failed.");
 
     // Retry connecting according to the retry policy.
-    if (lws_retry_sul_schedule(context_, /* Thread Service Index */ 0, &(retry_connect_.sul), &retry_and_idle_policy_,
+    if (aws_lws_retry_sul_schedule(context_, /* Thread Service Index */ 0, &(retry_connect_.sul), &retry_and_idle_policy_,
                                RetryConnect, &connection_retry_count_)) {
-      lwsl_err("Connection attempts exhausted.\n");
+      aws_lwsl_err("Connection attempts exhausted.\n");
       return;
     }
   }
 
   // TODO: Figure out why it's necessary to manually set SSL certs.
-  auto lws_vhost = lws_get_vhost(lws);
+  auto aws_lws_vhost = aws_lws_get_vhost(aws_lws);
   for (const auto& all_prod_cert : all_prod_certs) {
-    lws_tls_client_vhost_extra_cert_mem(lws_vhost, all_prod_cert.cert, all_prod_cert.len);
+    aws_lws_tls_client_vhost_extra_cert_mem(aws_lws_vhost, all_prod_cert.cert, all_prod_cert.len);
   }
 }
 
 bool LibwebsocketsWebsocket::IsPollable() { return true; }
 
-void LibwebsocketsWebsocket::Poll() { lws_service(context_, 0); }
+void LibwebsocketsWebsocket::Poll() { aws_lws_service(context_, 0); }
 
 void LibwebsocketsWebsocket::Close() {
   if (!context_) return;
 
-  lws_context_destroy(context_);
-  lwsl_user("Closed\n");
+  aws_lws_context_destroy(context_);
+  aws_lwsl_user("Closed\n");
 }
 
 void LibwebsocketsWebsocket::SendBinary(const std::vector<uint8_t>& data) {
   message_queue_.push(data);
 
   // Triggers LWS_CALLBACK_CLIENT_WRITEABLE event in Callback when socket is ready to accept data.
-  lws_callback_on_writable(wsi_);
+  aws_lws_callback_on_writable(wsi_);
 }
 
 int LibwebsocketsWebsocket::ConvertLogLevel(LogLevel level) {
-  int lws_level = 0;
+  int aws_lws_level = 0;
   switch (level) {
     case LogLevel::kVerbose:
-      lws_level = LLL_USER | LLL_NOTICE | LLL_PARSER | LLL_HEADER | LLL_EXT | LLL_CLIENT | LLL_LATENCY;
+      aws_lws_level = LLL_USER | LLL_NOTICE | LLL_PARSER | LLL_HEADER | LLL_EXT | LLL_CLIENT | LLL_LATENCY;
     case LogLevel::kDebug:
-      lws_level |= LLL_DEBUG;
+      aws_lws_level |= LLL_DEBUG;
     case LogLevel::kInfo:
-      lws_level |= LLL_INFO;
+      aws_lws_level |= LLL_INFO;
     case LogLevel::kWarning:
-      lws_level |= LLL_WARN;
+      aws_lws_level |= LLL_WARN;
     case LogLevel::kError:
-      lws_level |= LLL_ERR;
+      aws_lws_level |= LLL_ERR;
     default:
       break;
   }
-  return lws_level;
+  return aws_lws_level;
 }
 
 void LibwebsocketsWebsocket::HandleError(const std::string& error_description) {
-  lwsl_err("%s", error_description.c_str());
+  aws_lwsl_err("%s", error_description.c_str());
   WebsocketErrorStatus error_status;
   error_status.description = error_description;
   observer_->OnWebsocketError(error_status);
