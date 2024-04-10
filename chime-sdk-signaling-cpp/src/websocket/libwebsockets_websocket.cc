@@ -40,7 +40,7 @@ LibwebsocketsWebsocket::LibwebsocketsWebsocket(LibwebsocketsWebsocketConfigurati
   // Configure libwebsocket protocols.
   struct aws_lws_protocols* protocols = new aws_lws_protocols[2]{
       {
-          configuration.protocol_name.c_str(), Callback,
+          configuration_.protocol_name.c_str(), Callback,
           0,     // per_session_data_size : Memory Libwebsockets will allocate for user data. NA in our case.
           4096,  // rx_buffer_size        : Max recieve buffer size.
           0,     // id                    : Unused by Libwebsockets.
